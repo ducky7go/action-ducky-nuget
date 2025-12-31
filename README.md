@@ -34,6 +34,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.x'
+
       - name: Publish Mod to NuGet
         uses: ducky7go/action-ducky-nuget@v1
         with:
@@ -53,6 +58,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.x'
 
       - name: Publish Mod to NuGet
         uses: ducky7go/action-ducky-nuget@v1
@@ -176,7 +186,8 @@ jobs:
 ## Requirements
 
 - GitHub Actions runner (ubuntu-latest, windows-latest, or macos-latest)
-- NuGet API key stored as a GitHub Secret
+- .NET SDK (add `actions/setup-dotnet@v4` step before using this action)
+- NuGet Trusted Publisher configuration OR NuGet API key stored as a GitHub Secret
 
 ---
 
