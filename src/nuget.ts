@@ -11,28 +11,7 @@ const NUGET_WRAPPER_PATH = join(homedir(), 'nuget');
 const isWindows = platform() === 'win32';
 
 /**
- * Checks if dotnet is available
- */
-export async function checkDotnet(): Promise<void> {
-  const core = await import('@actions/core');
-
-  try {
-    const { execSync } = await import('child_process');
-    const version = execSync('dotnet --version', { encoding: 'utf-8' }).trim();
-    core.info(`Using dotnet ${version}`);
-  } catch {
-    throw new Error(
-      'dotnet command not found. Please add the following step before this action:\n' +
-      '  - name: Setup .NET SDK\n' +
-      '    uses: actions/setup-dotnet@v4\n' +
-      '    with:\n' +
-      '      dotnet-version: \'8.x\''
-    );
-  }
-}
-
-/**
- * Ensures nuget.exe is available (for pack command on Unix systems)
+ * Ensures nuget.exe is available
  */
 export async function ensureNugetExe(): Promise<string> {
   const core = await import('@actions/core');
@@ -114,7 +93,6 @@ async function downloadFile(url: string, destPath: string): Promise<void> {
 
 /**
  * Runs `nuget pack` to create a .nupkg file
- * Uses nuget.exe with mono on Unix, directly on Windows
  */
 export async function packNupkg(
   nuspecFile: string,
@@ -181,10 +159,10 @@ export async function packNupkg(
 }
 
 /**
- * Runs `dotnet nuget push` to publish a .nupkg file
+ * Runs `nuget push` to publish a .nupkg file
  * @param packagePath Path to the .nupkg file
  * @param server NuGet server URL
- * @param apiKey Optional API key (if not provided, uses Trusted Publisher/OIDC)
+ * @param apiKey API key from NuGet/login@v1
  */
 export async function pushNupkg(
   packagePath: string,
@@ -197,27 +175,28 @@ export async function pushNupkg(
   try {
     const packageName = packagePath.split('/').pop() || packagePath;
 
-    // Build command args for dotnet nuget push
+    // Get the nuget command (nuget.exe or mono wrapper)
+    const nugetCmd = await ensureNugetExe();
+
+    // Build command args for nuget push
     const args = [
-      'nuget',
       'push',
       packagePath,
-      '--source', server
+      '-Source', server
     ];
 
-    // If API key is provided, use it; otherwise use Trusted Publisher (no --api-key)
     if (apiKey && apiKey.trim() !== '') {
-      core.info(`Running: dotnet nuget push ${packageName} --source ${server} (with API key)`);
-      args.push('--api-key', apiKey);
+      args.push('-ApiKey', apiKey);
       core.setSecret(apiKey);
+      core.info(`Running: ${nugetCmd} push ${packageName} -Source ${server} (with API key)`);
     } else {
-      core.info(`Running: dotnet nuget push ${packageName} --source ${server} (using Trusted Publisher/OIDC)`);
+      core.info(`Running: ${nugetCmd} push ${packageName} -Source ${server}`);
     }
 
     let stdout = '';
     let stderr = '';
 
-    const exitCode = await exec('dotnet', args, {
+    const exitCode = await exec(nugetCmd, args, {
       cwd: workingDirectory,
       listeners: {
         stdout: (data: Buffer) => {

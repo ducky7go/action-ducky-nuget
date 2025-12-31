@@ -5,7 +5,7 @@ import { existsSync } from 'fs';
 import { readInfoIni } from './parser.js';
 import { validateMetadata } from './validation.js';
 import { generateNuspec, hasPreviewImage } from './nuspec.js';
-import { checkDotnet, packNupkg, pushNupkg } from './nuget.js';
+import { packNupkg, pushNupkg } from './nuget.js';
 
 async function run(): Promise<void> {
   try {
@@ -65,12 +65,8 @@ async function run(): Promise<void> {
     }
     core.info('  - Validation passed');
 
-    // Step 3: Check dotnet availability
-    core.info('Step 3: Checking .NET SDK...');
-    await checkDotnet();
-
-    // Step 4: Generate .nuspec file
-    core.info('Step 4: Generating .nuspec file...');
+    // Step 3: Generate .nuspec file
+    core.info('Step 3: Generating .nuspec file...');
     const hasPreview = await hasPreviewImage(modFolderPath);
     const nuspecContent = generateNuspec(metadata, hasPreview);
     core.info(`  - Has preview.png: ${hasPreview}`);

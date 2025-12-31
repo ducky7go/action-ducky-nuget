@@ -36,12 +36,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.x'
-
-      - name: Install Mono (for nuget.exe pack)
+      - name: Install Mono (for nuget.exe)
         run: |
           sudo apt-get update
           sudo apt-get install -y mono-complete
@@ -67,11 +62,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.x'
 
       - name: Install Mono
         run: |
@@ -200,16 +190,10 @@ jobs:
 ## Requirements
 
 - GitHub Actions runner (ubuntu-latest, windows-latest, or macos-latest)
-- **.NET SDK**: Add `actions/setup-dotnet@v4` step (required for `dotnet nuget push`)
-- **Mono** (Linux/macOS only): Add mono installation step (required for `nuget.exe pack`)
+- **Mono** (Linux/macOS only): Add mono installation step (required for `nuget.exe`)
 - **NuGet authentication**:
   - Option A: Use `NuGet/login@v1` action with OIDC (recommended)
   - Option B: Store NuGet API key in GitHub Secrets
-
-### Why both .NET SDK and Mono?
-
-- **Mono** → Runs `nuget.exe pack` to create `.nupkg` from `.nuspec` file
-- **.NET SDK** → Runs `dotnet nuget push` to publish package to server
 
 ---
 
