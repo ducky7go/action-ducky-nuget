@@ -1,4 +1,14 @@
 import { exec } from '@actions/exec';
+import { homedir, platform } from 'os';
+import { join } from 'path';
+import { existsSync } from 'fs';
+import { chmod } from 'fs/promises';
+
+const NUGET_EXE_URL = 'https://dist.nuget.org/win-x86-commandline/latest/nuget.exe';
+const NUGET_EXE_PATH = join(homedir(), 'nuget.exe');
+const NUGET_WRAPPER_PATH = join(homedir(), 'nuget');
+
+const isWindows = platform() === 'win32';
 
 /**
  * Checks if dotnet is available
@@ -9,7 +19,7 @@ export async function checkDotnet(): Promise<void> {
   try {
     const { execSync } = await import('child_process');
     const version = execSync('dotnet --version', { encoding: 'utf-8' }).trim();
-    core.info(`Using dotnet ${version} for NuGet operations`);
+    core.info(`Using dotnet ${version}`);
   } catch {
     throw new Error(
       'dotnet command not found. Please add the following step before this action:\n' +
@@ -22,35 +32,89 @@ export async function checkDotnet(): Promise<void> {
 }
 
 /**
- * Executes a dotnet nuget command
+ * Ensures nuget.exe is available (for pack command on Unix systems)
  */
-export async function execDotnetNuget(args: string[], workingDirectory: string): Promise<{
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-}> {
-  let stdout = '';
-  let stderr = '';
+export async function ensureNugetExe(): Promise<string> {
+  const core = await import('@actions/core');
 
-  // Use 'dotnet nuget' for all commands
-  const exitCode = await exec('dotnet', ['nuget', ...args], {
-    cwd: workingDirectory,
-    listeners: {
-      stdout: (data: Buffer) => {
-        stdout += data.toString();
-      },
-      stderr: (data: Buffer) => {
-        stderr += data.toString();
-      }
-    },
-    silent: false
-  });
+  if (isWindows) {
+    // Windows: just use nuget.exe directly
+    if (!existsSync(NUGET_EXE_PATH)) {
+      core.info(`Downloading nuget.exe for Windows...`);
+      await downloadFile(NUGET_EXE_URL, NUGET_EXE_PATH);
+    }
+    return NUGET_EXE_PATH;
+  } else {
+    // Unix: check if mono is available first
+    try {
+      const { execSync } = await import('child_process');
+      execSync('mono --version', { stdio: 'ignore' });
+      core.info('Mono is available for nuget.exe');
+    } catch {
+      throw new Error(
+        'mono command not found. Please add the following step before this action:\n' +
+        '  - name: Install Mono (for nuget.exe)\n' +
+        '    run: |\n' +
+        '      sudo apt-get update\n' +
+        '      sudo apt-get install -y mono-complete'
+      );
+    }
 
-  return { exitCode, stdout, stderr };
+    // Create mono wrapper for nuget.exe
+    if (existsSync(NUGET_WRAPPER_PATH)) {
+      return NUGET_WRAPPER_PATH;
+    }
+
+    if (!existsSync(NUGET_EXE_PATH)) {
+      core.info(`Downloading nuget.exe...`);
+      await downloadFile(NUGET_EXE_URL, NUGET_EXE_PATH);
+    }
+
+    // Create wrapper script that uses mono
+    const { writeFile } = await import('fs/promises');
+    const wrapperContent = `#!/bin/bash
+mono "${NUGET_EXE_PATH}" "$@"
+`;
+    await writeFile(NUGET_WRAPPER_PATH, wrapperContent, { mode: 0o755 });
+    core.info(`Created NuGet wrapper at: ${NUGET_WRAPPER_PATH}`);
+    return NUGET_WRAPPER_PATH;
+  }
 }
 
 /**
- * Runs `dotnet nuget pack` to create a .nupkg file
+ * Download file from URL to path
+ */
+async function downloadFile(url: string, destPath: string): Promise<void> {
+  const https = await import('https');
+  const fs = await import('fs');
+
+  return new Promise<void>((resolve, reject) => {
+    const file = fs.createWriteStream(destPath);
+    https.get(url, (response: any) => {
+      if (response.statusCode !== 200) {
+        reject(new Error(`Failed to download: ${response.statusCode}`));
+        return;
+      }
+      response.pipe(file);
+      file.on('finish', async () => {
+        file.close();
+        try {
+          await chmod(destPath, 0o755);
+        } catch {
+          // Ignore permission errors
+        }
+        resolve();
+      });
+    }).on('error', (err: Error) => {
+      fs.unlink(destPath, () => {});
+      reject(err);
+    });
+  });
+}
+
+/**
+ * Runs `nuget pack` to create a .nupkg file
+ * Uses nuget.exe with mono on Unix, directly on Windows
  */
 export async function packNupkg(
   nuspecFile: string,
@@ -60,19 +124,36 @@ export async function packNupkg(
 
   try {
     const nuspecName = nuspecFile.split('/').pop() || nuspecFile;
-    core.info(`Running: dotnet nuget pack ${nuspecName}`);
 
-    const result = await execDotnetNuget(['pack', nuspecFile], workingDirectory);
+    // Get the nuget command (nuget.exe or mono wrapper)
+    const nugetCmd = await ensureNugetExe();
+    core.info(`Running: ${nugetCmd} pack ${nuspecName}`);
 
-    if (result.exitCode !== 0) {
+    let stdout = '';
+    let stderr = '';
+
+    const exitCode = await exec(nugetCmd, ['pack', nuspecFile], {
+      cwd: workingDirectory,
+      listeners: {
+        stdout: (data: Buffer) => {
+          stdout += data.toString();
+        },
+        stderr: (data: Buffer) => {
+          stderr += data.toString();
+        }
+      },
+      silent: false
+    });
+
+    if (exitCode !== 0) {
       return {
         success: false,
-        error: `NuGet pack failed with exit code ${result.exitCode}: ${result.stderr || result.stdout}`
+        error: `NuGet pack failed with exit code ${exitCode}: ${stderr || stdout}`
       };
     }
 
     // Extract package path from output
-    const match = result.stdout.match(/Successfully created package '(.+?)'/);
+    const match = stdout.match(/Successfully created package '(.+?)'/);
     if (match && match[1]) {
       return { success: true, packagePath: match[1] };
     }
@@ -116,8 +197,9 @@ export async function pushNupkg(
   try {
     const packageName = packagePath.split('/').pop() || packagePath;
 
-    // Build command args
+    // Build command args for dotnet nuget push
     const args = [
+      'nuget',
       'push',
       packagePath,
       '--source', server
@@ -127,18 +209,31 @@ export async function pushNupkg(
     if (apiKey && apiKey.trim() !== '') {
       core.info(`Running: dotnet nuget push ${packageName} --source ${server} (with API key)`);
       args.push('--api-key', apiKey);
-      core.setSecret(apiKey); // Mask API key in logs
+      core.setSecret(apiKey);
     } else {
       core.info(`Running: dotnet nuget push ${packageName} --source ${server} (using Trusted Publisher/OIDC)`);
-      // No API key - relies on NuGet Trusted Publisher configuration
     }
 
-    const result = await execDotnetNuget(args, workingDirectory);
+    let stdout = '';
+    let stderr = '';
 
-    if (result.exitCode !== 0) {
+    const exitCode = await exec('dotnet', args, {
+      cwd: workingDirectory,
+      listeners: {
+        stdout: (data: Buffer) => {
+          stdout += data.toString();
+        },
+        stderr: (data: Buffer) => {
+          stderr += data.toString();
+        }
+      },
+      silent: false
+    });
+
+    if (exitCode !== 0) {
       return {
         success: false,
-        error: `NuGet push failed with exit code ${result.exitCode}: ${result.stderr || result.stdout}`
+        error: `NuGet push failed with exit code ${exitCode}: ${stderr || stdout}`
       };
     }
 
