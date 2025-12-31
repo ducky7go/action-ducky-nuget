@@ -3,14 +3,14 @@ name: Publish DisplayItemValue Mod
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write  # Required for OIDC/Trusted Publisher
+      id-token: write # Required for OIDC/Trusted Publisher
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -18,7 +18,7 @@ jobs:
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.x'
+          dotnet-version: "8.x"
 
       - name: Install Mono (for nuget.exe)
         run: |
@@ -39,12 +39,19 @@ jobs:
           # Update version in DisplayItemValue/info.ini
           sed -i "s/^version = .*/version = ${{ steps.version.outputs.version }}/" DisplayItemValue/info.ini
 
+      # Get a short-lived NuGet API key
+      - name: NuGet login (OIDC → temp API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }} # Recommended: use a secret like ${{ secrets.NUGET_USER }} for your nuget.org username (profile name), NOT your email address
+
       - name: Publish to NuGet (Trusted Publisher)
         uses: ./
         with:
-          mod_folder_path: './DisplayItemValue'
-          nuget_server: 'https://api.nuget.org/v3/index.json'
-          # nuget_api_key omitted - using Trusted Publisher/OIDC instead
+          mod_folder_path: "./DisplayItemValue"
+          nuget_server: "https://api.nuget.org/v3/index.json"
+          nuget_api_key: "${{ steps.login.outputs.NUGET_API_KEY }}"
 
       - name: Upload package to release
         uses: actions/upload-artifact@v4
