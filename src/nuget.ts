@@ -1,44 +1,88 @@
 import { exec } from '@actions/exec';
 import { mkdirP, cp } from '@actions/io';
-import { homedir } from 'os';
+import { homedir, platform } from 'os';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { chmod } from 'fs/promises';
 
-const NUGET_URL = 'https://dist.nuget.org/win-x86-commandline/latest/nuget.exe';
-export const NUGET_PATH = join(homedir(), 'nuget.exe');
+const NUGET_EXE_URL = 'https://dist.nuget.org/win-x86-commandline/latest/nuget.exe';
+const NUGET_LINUX_URL = 'https://dist.nuget.org/linux-x64-commandline/latest/nuget.exe';
+
+// Determine platform-specific paths
+const isWindows = platform() === 'win32';
+const NUGET_EXE_PATH = join(homedir(), isWindows ? 'nuget.exe' : 'nuget.exe');
+// On Linux, we use a wrapper script
+const NUGET_WRAPPER_PATH = join(homedir(), 'nuget');
+
+export const NUGET_PATH = isWindows ? NUGET_EXE_PATH : NUGET_WRAPPER_PATH;
 
 /**
  * Downloads and installs the NuGet CLI tool
  */
 export async function installNuGet(): Promise<string> {
-  if (existsSync(NUGET_PATH)) {
-    return NUGET_PATH;
-  }
-
-  // Download nuget.exe
   const core = await import('@actions/core');
-  core.info(`Downloading NuGet CLI from ${NUGET_URL}`);
 
+  if (isWindows) {
+    // Windows: download nuget.exe directly
+    if (existsSync(NUGET_EXE_PATH)) {
+      return NUGET_EXE_PATH;
+    }
+
+    core.info(`Downloading NuGet CLI for Windows from ${NUGET_EXE_URL}`);
+    await downloadFile(NUGET_EXE_URL, NUGET_EXE_PATH);
+    return NUGET_EXE_PATH;
+  } else {
+    // Linux/macOS: use dotnet tool or download with mono wrapper
+    if (existsSync(NUGET_WRAPPER_PATH)) {
+      return NUGET_WRAPPER_PATH;
+    }
+
+    // Check if dotnet is available
+    try {
+      const { execSync } = await import('child_process');
+      execSync('dotnet --version', { stdio: 'ignore' });
+      core.info('Using dotnet tool for NuGet operations');
+      return 'dotnet'; // Will use 'dotnet nuget' commands
+    } catch {
+      // dotnet not available - show clear error message
+      throw new Error(
+        'dotnet command not found. Please add the following step before this action:\n' +
+        '  - name: Setup .NET SDK\n' +
+        '    uses: actions/setup-dotnet@v4\n' +
+        '    with:\n' +
+        '      dotnet-version: \'8.x\''
+      );
+    }
+  }
+}
+
+/**
+ * Download file from URL to path
+ */
+async function downloadFile(url: string, destPath: string): Promise<void> {
   const https = await import('https');
   const fs = await import('fs');
 
-  return new Promise<string>((resolve, reject) => {
-    const file = fs.createWriteStream(NUGET_PATH);
-    https.get(NUGET_URL, (response: any) => {
+  return new Promise<void>((resolve, reject) => {
+    const file = fs.createWriteStream(destPath);
+    https.get(url, (response: any) => {
+      if (response.statusCode !== 200) {
+        reject(new Error(`Failed to download: ${response.statusCode}`));
+        return;
+      }
       response.pipe(file);
       file.on('finish', async () => {
         file.close();
         // Make executable on Unix-like systems
         try {
-          await chmod(NUGET_PATH, 0o755);
+          await chmod(destPath, 0o755);
         } catch {
-          // Ignore permission errors on Windows
+          // Ignore permission errors
         }
-        resolve(NUGET_PATH);
+        resolve();
       });
     }).on('error', (err: Error) => {
-      fs.unlink(NUGET_PATH, () => {});
+      fs.unlink(destPath, () => {});
       reject(err);
     });
   });
@@ -55,7 +99,23 @@ export async function execNuGet(args: string[], workingDirectory: string): Promi
   let stdout = '';
   let stderr = '';
 
-  const exitCode = await exec(`"${NUGET_PATH}"`, args, {
+  // Check if we should use dotnet nuget
+  const useDotnet = process.env.USE_DOTNET_NUGET === 'true' || NUGET_PATH === 'dotnet';
+
+  let command: string;
+  let fullArgs: string[];
+
+  if (useDotnet) {
+    // Use 'dotnet nuget' command
+    command = 'dotnet';
+    fullArgs = ['nuget', ...args];
+  } else {
+    // Use mono wrapper or direct exe
+    command = NUGET_PATH;
+    fullArgs = args;
+  }
+
+  const exitCode = await exec(command, fullArgs, {
     cwd: workingDirectory,
     listeners: {
       stdout: (data: Buffer) => {
@@ -65,7 +125,7 @@ export async function execNuGet(args: string[], workingDirectory: string): Promi
         stderr += data.toString();
       }
     },
-    silent: false // Allow output to go to action logs
+    silent: false
   });
 
   return { exitCode, stdout, stderr };
