@@ -2,6 +2,10 @@ name: 'Ducky NuGet Mod Publisher'
 description: 'Package and publish game mods to NuGet servers following the NuGet Mod Packaging Specification v1.0'
 author: 'newbe36524'
 
+branding:
+  icon: 'arrow-up-circle'
+  color: 'blue'
+
 inputs:
   mod_folder_path:
     description: 'Path to the mod folder to package (relative to repository root or absolute)'
@@ -29,3 +33,4 @@ outputs:
 runs:
   using: 'node20'
   main: 'dist/index.js'
+
