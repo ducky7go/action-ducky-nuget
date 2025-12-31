@@ -3,15 +3,12 @@
  */
 export declare function checkDotnet(): Promise<void>;
 /**
- * Executes a dotnet nuget command
+ * Ensures nuget.exe is available (for pack command on Unix systems)
  */
-export declare function execDotnetNuget(args: string[], workingDirectory: string): Promise<{
-    exitCode: number;
-    stdout: string;
-    stderr: string;
-}>;
+export declare function ensureNugetExe(): Promise<string>;
 /**
- * Runs `dotnet nuget pack` to create a .nupkg file
+ * Runs `nuget pack` to create a .nupkg file
+ * Uses nuget.exe with mono on Unix, directly on Windows
  */
 export declare function packNupkg(nuspecFile: string, workingDirectory: string): Promise<{
     success: boolean;

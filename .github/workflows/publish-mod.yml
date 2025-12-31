@@ -20,6 +20,11 @@ jobs:
         with:
           dotnet-version: '8.x'
 
+      - name: Install Mono (for nuget.exe)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mono-complete
+
       - name: Extract version from tag
         id: version
         run: |
