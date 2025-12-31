@@ -1,8 +1,9 @@
 name: Publish DisplayItemValue Mod
 
 on:
-  release:
-    types: [created]
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   publish:
