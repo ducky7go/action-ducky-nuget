@@ -26098,7 +26098,11 @@ function generateNuspec(metadata, hasPreviewPng) {
     <version>${escapeXml(version)}</version>
     <title>${escapeXml(metadata.displayName)}</title>
     <description>${escapeXml(metadata.description)}</description>
-    <authors>${escapeXml(authors)}</authors>`;
+    <authors>${escapeXml(authors)}</authors>
+    <developmentDependency>false</developmentDependency>
+    <frameworkAssemblies>
+      <frameworkAssembly assemblyName="netstandard" targetFramework=".NETStandard2.1" />
+    </frameworkAssemblies>`;
     if (tags) {
         xml += `\n    <tags>${escapeXml(tags)}</tags>`;
     }

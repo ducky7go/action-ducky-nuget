@@ -13,9 +13,9 @@ GitHub Action for packaging and publishing game mods to NuGet servers following 
 
 ## Usage
 
-### Using Trusted Publisher (Recommended)
+### Complete Example (Recommended)
 
-No API key required - uses GitHub OIDC for secure authentication:
+Full workflow with all required dependencies:
 
 ```yaml
 name: Publish Mod to NuGet
@@ -28,29 +28,38 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment: production  # Optional: for environment protection rules
     permissions:
       contents: read
       id-token: write  # Required for OIDC
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.x'
 
+      - name: Install Mono (for nuget.exe pack)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mono-complete
+
+      - name: NuGet login (OIDC → temp API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}  # Your nuget.org username (not email)
+
       - name: Publish Mod to NuGet
         uses: ducky7go/action-ducky-nuget@v1
         with:
           mod_folder_path: './mods/MyMod'
-          # nuget_api_key omitted - using Trusted Publisher
+          nuget_api_key: ${{ steps.login.outputs.NUGET_API_KEY }}
 ```
 
-**Note**: You must configure Trusted Publisher in your NuGet account settings:
-1. Go to [NuGet.org](https://www.nuget.org) → Account settings → Trusted Publishers
-2. Add your GitHub repository as a trusted publisher
-
-### Using API Key
+### Minimal Example (without OIDC)
 
 ```yaml
 jobs:
@@ -63,6 +72,11 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.x'
+
+      - name: Install Mono
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mono-complete
 
       - name: Publish Mod to NuGet
         uses: ducky7go/action-ducky-nuget@v1
@@ -186,8 +200,16 @@ jobs:
 ## Requirements
 
 - GitHub Actions runner (ubuntu-latest, windows-latest, or macos-latest)
-- .NET SDK (add `actions/setup-dotnet@v4` step before using this action)
-- NuGet Trusted Publisher configuration OR NuGet API key stored as a GitHub Secret
+- **.NET SDK**: Add `actions/setup-dotnet@v4` step (required for `dotnet nuget push`)
+- **Mono** (Linux/macOS only): Add mono installation step (required for `nuget.exe pack`)
+- **NuGet authentication**:
+  - Option A: Use `NuGet/login@v1` action with OIDC (recommended)
+  - Option B: Store NuGet API key in GitHub Secrets
+
+### Why both .NET SDK and Mono?
+
+- **Mono** → Runs `nuget.exe pack` to create `.nupkg` from `.nuspec` file
+- **.NET SDK** → Runs `dotnet nuget push` to publish package to server
 
 ---
 
