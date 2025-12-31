@@ -1,18 +1,17 @@
-export declare const NUGET_PATH: string;
 /**
- * Downloads and installs the NuGet CLI tool
+ * Checks if dotnet is available
  */
-export declare function installNuGet(): Promise<string>;
+export declare function checkDotnet(): Promise<void>;
 /**
- * Executes a NuGet command
+ * Executes a dotnet nuget command
  */
-export declare function execNuGet(args: string[], workingDirectory: string): Promise<{
+export declare function execDotnetNuget(args: string[], workingDirectory: string): Promise<{
     exitCode: number;
     stdout: string;
     stderr: string;
 }>;
 /**
- * Runs `nuget pack` to create a .nupkg file
+ * Runs `dotnet nuget pack` to create a .nupkg file
  */
 export declare function packNupkg(nuspecFile: string, workingDirectory: string): Promise<{
     success: boolean;
@@ -20,7 +19,7 @@ export declare function packNupkg(nuspecFile: string, workingDirectory: string):
     error?: string;
 }>;
 /**
- * Runs `nuget push` to publish a .nupkg file
+ * Runs `dotnet nuget push` to publish a .nupkg file
  * @param packagePath Path to the .nupkg file
  * @param server NuGet server URL
  * @param apiKey Optional API key (if not provided, uses Trusted Publisher/OIDC)

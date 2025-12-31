@@ -25740,10 +25740,9 @@ async function run() {
             return;
         }
         core.info('  - Validation passed');
-        // Step 3: Install NuGet CLI
-        core.info('Step 3: Installing NuGet CLI...');
-        await (0, nuget_js_1.installNuGet)();
-        core.info(`  - NuGet CLI installed at: ${nuget_js_1.NUGET_PATH}`);
+        // Step 3: Check dotnet availability
+        core.info('Step 3: Checking .NET SDK...');
+        await (0, nuget_js_1.checkDotnet)();
         // Step 4: Generate .nuspec file
         core.info('Step 4: Generating .nuspec file...');
         const hasPreview = await (0, nuspec_js_1.hasPreviewImage)(modFolderPath);
@@ -25847,112 +25846,37 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.NUGET_PATH = void 0;
-exports.installNuGet = installNuGet;
-exports.execNuGet = execNuGet;
+exports.checkDotnet = checkDotnet;
+exports.execDotnetNuget = execDotnetNuget;
 exports.packNupkg = packNupkg;
 exports.pushNupkg = pushNupkg;
 const exec_1 = __nccwpck_require__(5236);
-const os_1 = __nccwpck_require__(857);
-const path_1 = __nccwpck_require__(6928);
-const fs_1 = __nccwpck_require__(9896);
-const promises_1 = __nccwpck_require__(1943);
-const NUGET_EXE_URL = 'https://dist.nuget.org/win-x86-commandline/latest/nuget.exe';
-const NUGET_LINUX_URL = 'https://dist.nuget.org/linux-x64-commandline/latest/nuget.exe';
-// Determine platform-specific paths
-const isWindows = (0, os_1.platform)() === 'win32';
-const NUGET_EXE_PATH = (0, path_1.join)((0, os_1.homedir)(), isWindows ? 'nuget.exe' : 'nuget.exe');
-// On Linux, we use a wrapper script
-const NUGET_WRAPPER_PATH = (0, path_1.join)((0, os_1.homedir)(), 'nuget');
-exports.NUGET_PATH = isWindows ? NUGET_EXE_PATH : NUGET_WRAPPER_PATH;
 /**
- * Downloads and installs the NuGet CLI tool
+ * Checks if dotnet is available
  */
-async function installNuGet() {
+async function checkDotnet() {
     const core = await Promise.resolve().then(() => __importStar(__nccwpck_require__(7484)));
-    if (isWindows) {
-        // Windows: download nuget.exe directly
-        if ((0, fs_1.existsSync)(NUGET_EXE_PATH)) {
-            return NUGET_EXE_PATH;
-        }
-        core.info(`Downloading NuGet CLI for Windows from ${NUGET_EXE_URL}`);
-        await downloadFile(NUGET_EXE_URL, NUGET_EXE_PATH);
-        return NUGET_EXE_PATH;
+    try {
+        const { execSync } = await Promise.resolve().then(() => __importStar(__nccwpck_require__(5317)));
+        const version = execSync('dotnet --version', { encoding: 'utf-8' }).trim();
+        core.info(`Using dotnet ${version} for NuGet operations`);
     }
-    else {
-        // Linux/macOS: use dotnet tool or download with mono wrapper
-        if ((0, fs_1.existsSync)(NUGET_WRAPPER_PATH)) {
-            return NUGET_WRAPPER_PATH;
-        }
-        // Check if dotnet is available
-        try {
-            const { execSync } = await Promise.resolve().then(() => __importStar(__nccwpck_require__(5317)));
-            execSync('dotnet --version', { stdio: 'ignore' });
-            core.info('Using dotnet tool for NuGet operations');
-            return 'dotnet'; // Will use 'dotnet nuget' commands
-        }
-        catch {
-            // dotnet not available - show clear error message
-            throw new Error('dotnet command not found. Please add the following step before this action:\n' +
-                '  - name: Setup .NET SDK\n' +
-                '    uses: actions/setup-dotnet@v4\n' +
-                '    with:\n' +
-                '      dotnet-version: \'8.x\'');
-        }
+    catch {
+        throw new Error('dotnet command not found. Please add the following step before this action:\n' +
+            '  - name: Setup .NET SDK\n' +
+            '    uses: actions/setup-dotnet@v4\n' +
+            '    with:\n' +
+            '      dotnet-version: \'8.x\'');
     }
 }
 /**
- * Download file from URL to path
+ * Executes a dotnet nuget command
  */
-async function downloadFile(url, destPath) {
-    const https = await Promise.resolve().then(() => __importStar(__nccwpck_require__(5692)));
-    const fs = await Promise.resolve().then(() => __importStar(__nccwpck_require__(9896)));
-    return new Promise((resolve, reject) => {
-        const file = fs.createWriteStream(destPath);
-        https.get(url, (response) => {
-            if (response.statusCode !== 200) {
-                reject(new Error(`Failed to download: ${response.statusCode}`));
-                return;
-            }
-            response.pipe(file);
-            file.on('finish', async () => {
-                file.close();
-                // Make executable on Unix-like systems
-                try {
-                    await (0, promises_1.chmod)(destPath, 0o755);
-                }
-                catch {
-                    // Ignore permission errors
-                }
-                resolve();
-            });
-        }).on('error', (err) => {
-            fs.unlink(destPath, () => { });
-            reject(err);
-        });
-    });
-}
-/**
- * Executes a NuGet command
- */
-async function execNuGet(args, workingDirectory) {
+async function execDotnetNuget(args, workingDirectory) {
     let stdout = '';
     let stderr = '';
-    // Check if we should use dotnet nuget
-    const useDotnet = process.env.USE_DOTNET_NUGET === 'true' || exports.NUGET_PATH === 'dotnet';
-    let command;
-    let fullArgs;
-    if (useDotnet) {
-        // Use 'dotnet nuget' command
-        command = 'dotnet';
-        fullArgs = ['nuget', ...args];
-    }
-    else {
-        // Use mono wrapper or direct exe
-        command = exports.NUGET_PATH;
-        fullArgs = args;
-    }
-    const exitCode = await (0, exec_1.exec)(command, fullArgs, {
+    // Use 'dotnet nuget' for all commands
+    const exitCode = await (0, exec_1.exec)('dotnet', ['nuget', ...args], {
         cwd: workingDirectory,
         listeners: {
             stdout: (data) => {
@@ -25967,14 +25891,14 @@ async function execNuGet(args, workingDirectory) {
     return { exitCode, stdout, stderr };
 }
 /**
- * Runs `nuget pack` to create a .nupkg file
+ * Runs `dotnet nuget pack` to create a .nupkg file
  */
 async function packNupkg(nuspecFile, workingDirectory) {
     const core = await Promise.resolve().then(() => __importStar(__nccwpck_require__(7484)));
     try {
         const nuspecName = nuspecFile.split('/').pop() || nuspecFile;
-        core.info(`Running: nuget pack ${nuspecName}`);
-        const result = await execNuGet(['pack', nuspecFile], workingDirectory);
+        core.info(`Running: dotnet nuget pack ${nuspecName}`);
+        const result = await execDotnetNuget(['pack', nuspecFile], workingDirectory);
         if (result.exitCode !== 0) {
             return {
                 success: false,
@@ -25988,10 +25912,11 @@ async function packNupkg(nuspecFile, workingDirectory) {
         }
         // Fallback: try to find .nupkg file in working directory
         const { readdir } = await Promise.resolve().then(() => __importStar(__nccwpck_require__(1943)));
+        const { join } = await Promise.resolve().then(() => __importStar(__nccwpck_require__(6928)));
         const files = await readdir(workingDirectory);
         const nupkgFile = files.find(f => f.endsWith('.nupkg'));
         if (nupkgFile) {
-            return { success: true, packagePath: (0, path_1.join)(workingDirectory, nupkgFile) };
+            return { success: true, packagePath: join(workingDirectory, nupkgFile) };
         }
         return {
             success: false,
@@ -26006,7 +25931,7 @@ async function packNupkg(nuspecFile, workingDirectory) {
     }
 }
 /**
- * Runs `nuget push` to publish a .nupkg file
+ * Runs `dotnet nuget push` to publish a .nupkg file
  * @param packagePath Path to the .nupkg file
  * @param server NuGet server URL
  * @param apiKey Optional API key (if not provided, uses Trusted Publisher/OIDC)
@@ -26019,19 +25944,19 @@ async function pushNupkg(packagePath, server, apiKey, workingDirectory) {
         const args = [
             'push',
             packagePath,
-            '-Source', server
+            '--source', server
         ];
-        // If API key is provided, use it; otherwise use Trusted Publisher (no -ApiKey)
+        // If API key is provided, use it; otherwise use Trusted Publisher (no --api-key)
         if (apiKey && apiKey.trim() !== '') {
-            core.info(`Running: nuget push ${packageName} -Source ${server} (with API key)`);
-            args.push('-ApiKey', apiKey);
+            core.info(`Running: dotnet nuget push ${packageName} --source ${server} (with API key)`);
+            args.push('--api-key', apiKey);
             core.setSecret(apiKey); // Mask API key in logs
         }
         else {
-            core.info(`Running: nuget push ${packageName} -Source ${server} (using Trusted Publisher/OIDC)`);
+            core.info(`Running: dotnet nuget push ${packageName} --source ${server} (using Trusted Publisher/OIDC)`);
             // No API key - relies on NuGet Trusted Publisher configuration
         }
-        const result = await execNuGet(args, workingDirectory);
+        const result = await execDotnetNuget(args, workingDirectory);
         if (result.exitCode !== 0) {
             return {
                 success: false,
