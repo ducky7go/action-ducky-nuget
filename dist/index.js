@@ -25740,11 +25740,8 @@ async function run() {
             return;
         }
         core.info('  - Validation passed');
-        // Step 3: Check dotnet availability
-        core.info('Step 3: Checking .NET SDK...');
-        await (0, nuget_js_1.checkDotnet)();
-        // Step 4: Generate .nuspec file
-        core.info('Step 4: Generating .nuspec file...');
+        // Step 3: Generate .nuspec file
+        core.info('Step 3: Generating .nuspec file...');
         const hasPreview = await (0, nuspec_js_1.hasPreviewImage)(modFolderPath);
         const nuspecContent = (0, nuspec_js_1.generateNuspec)(metadata, hasPreview);
         core.info(`  - Has preview.png: ${hasPreview}`);
@@ -25846,7 +25843,6 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.checkDotnet = checkDotnet;
 exports.ensureNugetExe = ensureNugetExe;
 exports.packNupkg = packNupkg;
 exports.pushNupkg = pushNupkg;
@@ -25860,25 +25856,7 @@ const NUGET_EXE_PATH = (0, path_1.join)((0, os_1.homedir)(), 'nuget.exe');
 const NUGET_WRAPPER_PATH = (0, path_1.join)((0, os_1.homedir)(), 'nuget');
 const isWindows = (0, os_1.platform)() === 'win32';
 /**
- * Checks if dotnet is available
- */
-async function checkDotnet() {
-    const core = await Promise.resolve().then(() => __importStar(__nccwpck_require__(7484)));
-    try {
-        const { execSync } = await Promise.resolve().then(() => __importStar(__nccwpck_require__(5317)));
-        const version = execSync('dotnet --version', { encoding: 'utf-8' }).trim();
-        core.info(`Using dotnet ${version}`);
-    }
-    catch {
-        throw new Error('dotnet command not found. Please add the following step before this action:\n' +
-            '  - name: Setup .NET SDK\n' +
-            '    uses: actions/setup-dotnet@v4\n' +
-            '    with:\n' +
-            '      dotnet-version: \'8.x\'');
-    }
-}
-/**
- * Ensures nuget.exe is available (for pack command on Unix systems)
+ * Ensures nuget.exe is available
  */
 async function ensureNugetExe() {
     const core = await Promise.resolve().then(() => __importStar(__nccwpck_require__(7484)));
@@ -25954,7 +25932,6 @@ async function downloadFile(url, destPath) {
 }
 /**
  * Runs `nuget pack` to create a .nupkg file
- * Uses nuget.exe with mono on Unix, directly on Windows
  */
 async function packNupkg(nuspecFile, workingDirectory) {
     const core = await Promise.resolve().then(() => __importStar(__nccwpck_require__(7484)));
@@ -26009,34 +25986,34 @@ async function packNupkg(nuspecFile, workingDirectory) {
     }
 }
 /**
- * Runs `dotnet nuget push` to publish a .nupkg file
+ * Runs `nuget push` to publish a .nupkg file
  * @param packagePath Path to the .nupkg file
  * @param server NuGet server URL
- * @param apiKey Optional API key (if not provided, uses Trusted Publisher/OIDC)
+ * @param apiKey API key from NuGet/login@v1
  */
 async function pushNupkg(packagePath, server, apiKey, workingDirectory) {
     const core = await Promise.resolve().then(() => __importStar(__nccwpck_require__(7484)));
     try {
         const packageName = packagePath.split('/').pop() || packagePath;
-        // Build command args for dotnet nuget push
+        // Get the nuget command (nuget.exe or mono wrapper)
+        const nugetCmd = await ensureNugetExe();
+        // Build command args for nuget push
         const args = [
-            'nuget',
             'push',
             packagePath,
-            '--source', server
+            '-Source', server
         ];
-        // If API key is provided, use it; otherwise use Trusted Publisher (no --api-key)
         if (apiKey && apiKey.trim() !== '') {
-            core.info(`Running: dotnet nuget push ${packageName} --source ${server} (with API key)`);
-            args.push('--api-key', apiKey);
+            args.push('-ApiKey', apiKey);
             core.setSecret(apiKey);
+            core.info(`Running: ${nugetCmd} push ${packageName} -Source ${server} (with API key)`);
         }
         else {
-            core.info(`Running: dotnet nuget push ${packageName} --source ${server} (using Trusted Publisher/OIDC)`);
+            core.info(`Running: ${nugetCmd} push ${packageName} -Source ${server}`);
         }
         let stdout = '';
         let stderr = '';
-        const exitCode = await (0, exec_1.exec)('dotnet', args, {
+        const exitCode = await (0, exec_1.exec)(nugetCmd, args, {
             cwd: workingDirectory,
             listeners: {
                 stdout: (data) => {
