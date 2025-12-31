@@ -1,0 +1,28 @@
+{
+  "name": "action-ducky-nuget",
+  "version": "1.0.0",
+  "description": "GitHub Action for packaging and publishing game mods to NuGet",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "package": "ncc build src/index.ts -o dist --license licenses.txt",
+    "test": "jest"
+  },
+  "keywords": [
+    "github-action",
+    "nuget",
+    "mod-packaging"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@actions/core": "^1.10.1",
+    "@actions/exec": "^1.1.1",
+    "@actions/io": "^1.1.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@vercel/ncc": "^0.38.1",
+    "typescript": "^5.3.3"
+  }
+}
