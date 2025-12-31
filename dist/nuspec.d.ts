@@ -7,4 +7,3 @@ export declare function generateNuspec(metadata: ModMetadata, hasPreviewPng: boo
  * Checks if preview.png exists in the mod folder
  */
 export declare function hasPreviewImage(modFolderPath: string): Promise<boolean>;
-//# sourceMappingURL=nuspec.d.ts.map

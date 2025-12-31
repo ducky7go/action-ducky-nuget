@@ -29,4 +29,3 @@ export declare function pushNupkg(packagePath: string, server: string, apiKey: s
     success: boolean;
     error?: string;
 }>;
-//# sourceMappingURL=nuget.d.ts.map

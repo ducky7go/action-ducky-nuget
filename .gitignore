@@ -1,3 +1,13 @@
 node_modules/
 *.log
 .DS_Store
+
+# Exclude intermediate TypeScript compilation files (we use ncc bundle instead)
+dist/*.d.ts
+dist/*.d.ts.map
+dist/*.js.map
+dist/nuget.js
+dist/nuspec.js
+dist/parser.js
+dist/validation.js
+dist/index.js.map
