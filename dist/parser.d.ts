@@ -39,4 +39,3 @@ export declare function parseInfoIni(content: string): ParseResult;
  * Reads and parses an info.ini file
  */
 export declare function readInfoIni(filePath: string): Promise<ParseResult>;
-//# sourceMappingURL=parser.d.ts.map

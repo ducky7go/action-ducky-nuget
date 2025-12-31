@@ -186,8 +186,11 @@ jobs:
 
 ```bash
 npm install
-npm run build
+npm run build    # Compile TypeScript to dist/
+npm run package  # Bundle with ncc into single file (required before commit)
 ```
+
+**重要**: 修改代码后必须运行 `npm run package` 来打包依赖，因为 GitHub Action 运行时不会安装 node_modules。
 
 ### Testing Locally
 

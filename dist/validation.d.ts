@@ -23,4 +23,3 @@ export declare function validateDllName(modFolderPath: string, name: string): Pr
  * Validates the mod metadata
  */
 export declare function validateMetadata(metadata: ModMetadata, modFolderPath: string): Promise<ValidationResult>;
-//# sourceMappingURL=validation.d.ts.map
