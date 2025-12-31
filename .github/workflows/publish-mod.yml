@@ -1,0 +1,42 @@
+name: Publish DisplayItemValue Mod
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # Required for OIDC/Trusted Publisher
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          # Get tag name and remove 'v' prefix if present
+          TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG#v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Update info.ini with tag version
+        run: |
+          # Update version in DisplayItemValue/info.ini
+          sed -i "s/^version = .*/version = ${{ steps.version.outputs.version }}/" DisplayItemValue/info.ini
+
+      - name: Publish to NuGet (Trusted Publisher)
+        uses: ./
+        with:
+          mod_folder_path: './DisplayItemValue'
+          nuget_server: 'https://api.nuget.org/v3/index.json'
+          # nuget_api_key omitted - using Trusted Publisher/OIDC instead
+
+      - name: Upload package to release
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-package
+          path: .nuget-temp/mod-copy/*.nupkg

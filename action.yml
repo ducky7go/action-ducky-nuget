@@ -1,0 +1,31 @@
+name: 'Ducky NuGet Mod Publisher'
+description: 'Package and publish game mods to NuGet servers following the NuGet Mod Packaging Specification v1.0'
+author: 'newbe36524'
+
+inputs:
+  mod_folder_path:
+    description: 'Path to the mod folder to package (relative to repository root or absolute)'
+    required: true
+
+  nuget_server:
+    description: 'NuGet server URL (default: nuget.org)'
+    required: false
+    default: 'https://api.nuget.org/v3/index.json'
+
+  nuget_api_key:
+    description: 'API key for NuGet server authentication (required unless using Trusted Publisher)'
+    required: false
+
+outputs:
+  success:
+    description: 'true if packaging and publishing succeeded'
+  package_path:
+    description: 'path to the generated .nupkg file'
+  version:
+    description: 'package version that was published'
+  error:
+    description: 'error message if the action failed'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
