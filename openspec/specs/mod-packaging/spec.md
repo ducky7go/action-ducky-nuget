@@ -7,6 +7,8 @@ TBD - created by archiving change nuget-mod-publishing-action. Update Purpose af
 
 The system SHALL read and parse metadata from the mod's `info.ini` file located at the specified mod folder path.
 
+**Implementation Note**: This requirement is now fulfilled by delegating to `@ducky7go/ducky-cli` via its command-line interface, rather than using internal TypeScript parsing code.
+
 #### Scenario: Successful info.ini parsing
 
 - **WHEN** a valid `info.ini` file exists at the specified mod folder path
@@ -29,6 +31,8 @@ The system SHALL read and parse metadata from the mod's `info.ini` file located 
 ### Requirement: DLL Filename Validation
 
 The system SHALL validate that the `name` field in `info.ini` matches the DLL filename (without extension) in the mod folder.
+
+**Implementation Note**: This requirement is now fulfilled by delegating to `@ducky7go/ducky-cli` via its command-line interface.
 
 #### Scenario: Valid DLL name match
 
@@ -53,6 +57,8 @@ The system SHALL validate that the `name` field in `info.ini` matches the DLL fi
 
 The system SHALL validate that the `version` field (if present) conforms to Semantic Versioning 2.0.0 format.
 
+**Implementation Note**: This requirement is now fulfilled by delegating to `@ducky7go/ducky-cli` via its command-line interface.
+
 #### Scenario: Valid SemVer version
 
 - **WHEN** the version field contains a valid SemVer 2.0.0 string
@@ -74,6 +80,8 @@ The system SHALL validate that the `version` field (if present) conforms to Sema
 ### Requirement: .nuspec File Generation
 
 The system SHALL generate a valid `.nuspec` file following the NuGet Mod Packaging Specification v1.0.
+
+**Implementation Note**: This requirement is now fulfilled by delegating to `@ducky7go/ducky-cli` via its command-line interface.
 
 #### Scenario: Generate .nuspec with all fields
 
@@ -100,6 +108,8 @@ The system SHALL generate a valid `.nuspec` file following the NuGet Mod Packagi
 
 The system SHALL configure the `.nuspec` files section to include all mod files using wildcard patterns.
 
+**Implementation Note**: This requirement is now fulfilled by delegating to `@ducky7go/ducky-cli` via its command-line interface.
+
 #### Scenario: Include all files with wildcard
 
 - **WHEN** generating the .nuspec files section
@@ -122,22 +132,26 @@ The system SHALL configure the `.nuspec` files section to include all mod files 
 
 The system SHALL create a `.nupkg` file using the NuGet CLI tool with the generated `.nuspec` file.
 
+**Implementation Note**: This requirement is now fulfilled by delegating to `@ducky7go/ducky-cli` via its command-line interface, which internally handles NuGet packaging.
+
 #### Scenario: Successful package creation
 
 - **WHEN** the .nuspec file is valid and all referenced files exist
-- **THEN** the system MUST execute `nuget pack [mod-name].nuspec`
+- **THEN** the system MUST execute packaging via ducky-cli
 - **AND** a `.nupkg` file MUST be created in the working directory
 - **AND** the action MUST output the package file path
 
 #### Scenario: Packaging failure
 
-- **WHEN** NuGet pack command fails
+- **WHEN** packaging command fails
 - **THEN** the system MUST capture and display the error output
 - **AND** the action MUST fail with a non-zero exit code
 
 ### Requirement: NuGet Server Publishing
 
 The system SHALL publish the created `.nupkg` file to the specified NuGet server using the provided API key.
+
+**Implementation Note**: This requirement is now fulfilled by delegating to `@ducky7go/ducky-cli` via its command-line interface, using the `ducky-cli nuget push` command.
 
 #### Scenario: Publish to nuget.org (default)
 
@@ -154,12 +168,12 @@ The system SHALL publish the created `.nupkg` file to the specified NuGet server
 #### Scenario: Publish with API key
 
 - **WHEN** publishing to any NuGet server
-- **THEN** the system MUST execute `nuget push [package].nupkg -Source [server] -ApiKey [key]`
+- **THEN** the system MUST invoke ducky-cli with appropriate server and API key parameters
 - **AND** the API key MUST NOT be logged in the action output
 
 #### Scenario: Publish failure
 
-- **WHEN** the NuGet push command fails
+- **WHEN** the push command fails
 - **THEN** the system MUST display the error message from the server
 - **AND** the action MUST fail with a non-zero exit code
 - **AND** common errors MUST include: authentication failure, version conflict, server unavailable
@@ -167,6 +181,8 @@ The system SHALL publish the created `.nupkg` file to the specified NuGet server
 ### Requirement: GitHub Action Input Parameters
 
 The system SHALL accept input parameters via GitHub Actions interface.
+
+**Implementation Note**: This requirement remains unchanged. The action continues to accept inputs via GitHub Actions, then translates them to ducky-cli command-line arguments.
 
 #### Scenario: Required mod_folder_path
 
@@ -179,15 +195,16 @@ The system SHALL accept input parameters via GitHub Actions interface.
 - **WHEN** the `nuget_server` input is not provided
 - **THEN** the system MUST default to `https://api.nuget.org/v3/index.json`
 
-#### Scenario: Required nuget_api_key
+#### Scenario: Optional nuget_api_key
 
-- **WHEN** the action is invoked
-- **THEN** the `nuget_api_key` input MUST be required
-- **AND** the key SHOULD be passed via GitHub Secrets
+- **WHEN** the `nuget_api_key` input is not provided
+- **THEN** the system MUST proceed without API key (for Trusted Publisher/OIDC flows)
 
 ### Requirement: GitHub Action Outputs
 
 The system SHALL provide outputs via GitHub Actions interface for workflow consumption.
+
+**Implementation Note**: This requirement remains unchanged in behavior. Outputs are derived from ducky-cli execution results.
 
 #### Scenario: Success output
 
@@ -205,6 +222,8 @@ The system SHALL provide outputs via GitHub Actions interface for workflow consu
 ### Requirement: Folder Structure Preservation
 
 The system SHALL preserve the original mod folder structure in the NuGet package's `content/` directory.
+
+**Implementation Note**: This requirement is now fulfilled by delegating to `@ducky7go/ducky-cli` via its command-line interface.
 
 #### Scenario: Preserve all files and folders
 
