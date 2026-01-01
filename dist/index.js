@@ -25683,13 +25683,14 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const core = __importStar(__nccwpck_require__(7484));
+const exec_1 = __nccwpck_require__(5236);
 const path_1 = __nccwpck_require__(6928);
-const promises_1 = __nccwpck_require__(1943);
 const fs_1 = __nccwpck_require__(9896);
-const parser_js_1 = __nccwpck_require__(7196);
-const validation_js_1 = __nccwpck_require__(4344);
-const nuspec_js_1 = __nccwpck_require__(3618);
-const nuget_js_1 = __nccwpck_require__(9860);
+const promises_1 = __nccwpck_require__(1943);
+/**
+ * Main action entry point
+ * Refactored to use @ducky7go/ducky-cli as a dependency
+ */
 async function run() {
     try {
         // Get inputs
@@ -25709,88 +25710,82 @@ async function run() {
         }
         // Verify mod folder exists
         if (!(0, fs_1.existsSync)(modFolderPath)) {
-            core.setFailed(`Mod folder not found: ${modFolderPath}`);
-            core.setOutput('error', `Mod folder not found: ${modFolderPath}`);
+            const errorMsg = `Mod folder not found: ${modFolderPath}`;
+            core.setFailed(errorMsg);
+            core.setOutput('error', errorMsg);
             core.setOutput('success', 'false');
             return;
         }
-        // Step 1: Parse info.ini
-        core.info('Step 1: Parsing info.ini...');
+        // Verify info.ini exists
         const infoIniPath = (0, path_1.resolve)(modFolderPath, 'info.ini');
-        const parseResult = await (0, parser_js_1.readInfoIni)(infoIniPath);
-        if (!parseResult.success || !parseResult.metadata) {
-            const errorMsg = `Failed to parse info.ini: ${parseResult.error}`;
+        if (!(0, fs_1.existsSync)(infoIniPath)) {
+            const errorMsg = `info.ini not found at: ${infoIniPath}`;
             core.setFailed(errorMsg);
             core.setOutput('error', errorMsg);
             core.setOutput('success', 'false');
             return;
         }
-        const metadata = parseResult.metadata;
-        core.info(`  - name: ${metadata.name}`);
-        core.info(`  - displayName: ${metadata.displayName}`);
-        core.info(`  - version: ${metadata.version || '1.0.0 (default)'}`);
-        // Step 2: Validate metadata
-        core.info('Step 2: Validating metadata...');
-        const validationResult = await (0, validation_js_1.validateMetadata)(metadata, modFolderPath);
-        if (!validationResult.success) {
-            const errorMsg = `Validation failed:\n${validationResult.errors.map(e => `  - ${e}`).join('\n')}`;
+        // Extract version from info.ini for output
+        try {
+            const infoIniContent = await (0, promises_1.readFile)(infoIniPath, 'utf-8');
+            const versionMatch = infoIniContent.match(/^version\s*=\s*(.+)$/m);
+            const version = versionMatch ? versionMatch[1].trim() : '1.0.0';
+            core.info(`Version from info.ini: ${version}`);
+            core.setOutput('version', version);
+        }
+        catch {
+            core.setOutput('version', '1.0.0');
+        }
+        // Build ducky-cli command arguments
+        const args = ['nuget', 'push', modFolderPath, '--pack'];
+        if (nugetServer) {
+            args.push('--server', nugetServer);
+        }
+        if (nugetApiKey) {
+            args.push('--api-key', nugetApiKey);
+        }
+        core.info(`Running: ducky ${args.map(a => a === nugetApiKey ? '***' : a).join(' ')}`);
+        // Execute ducky-cli command
+        let stdout = '';
+        let stderr = '';
+        const exitCode = await (0, exec_1.exec)('npx', ['-y', '@ducky7go/ducky-cli', ...args], {
+            cwd: workspace,
+            listeners: {
+                stdout: (data) => {
+                    const text = data.toString();
+                    stdout += text;
+                    core.info(text.trim());
+                },
+                stderr: (data) => {
+                    const text = data.toString();
+                    stderr += text;
+                    core.error(text.trim());
+                }
+            },
+            silent: false
+        });
+        if (exitCode !== 0) {
+            const errorMsg = `ducky-cli failed with exit code ${exitCode}: ${stderr || stdout}`;
             core.setFailed(errorMsg);
             core.setOutput('error', errorMsg);
             core.setOutput('success', 'false');
             return;
         }
-        core.info('  - Validation passed');
-        // Step 3: Generate .nuspec file
-        core.info('Step 3: Generating .nuspec file...');
-        const hasPreview = await (0, nuspec_js_1.hasPreviewImage)(modFolderPath);
-        const nuspecContent = (0, nuspec_js_1.generateNuspec)(metadata, hasPreview);
-        core.info(`  - Has preview.png: ${hasPreview}`);
-        // Create temp directory for packaging
-        const tempDir = (0, path_1.resolve)(workspace, '.nuget-temp');
-        await (0, promises_1.mkdir)(tempDir, { recursive: true });
-        const nuspecPath = (0, path_1.resolve)(tempDir, `${metadata.name}.nuspec`);
-        await (0, promises_1.writeFile)(nuspecPath, nuspecContent, 'utf-8');
-        core.info(`  - .nuspec created at: ${nuspecPath}`);
-        // Step 5: Copy mod files to temp directory
-        core.info('Step 5: Copying mod files for packaging...');
-        const { cp } = await Promise.resolve().then(() => __importStar(__nccwpck_require__(4994)));
-        await cp(modFolderPath, (0, path_1.resolve)(tempDir, 'mod-copy'), { recursive: true });
-        const modCopyPath = (0, path_1.resolve)(tempDir, 'mod-copy');
-        core.info(`  - Files copied to: ${modCopyPath}`);
-        // Copy .nuspec to the mod copy directory
-        const { copyFile } = await Promise.resolve().then(() => __importStar(__nccwpck_require__(1943)));
-        await copyFile(nuspecPath, (0, path_1.resolve)(modCopyPath, `${metadata.name}.nuspec`));
-        // Step 6: Pack .nupkg
-        core.info('Step 6: Creating NuGet package...');
-        const packResult = await (0, nuget_js_1.packNupkg)(`${metadata.name}.nuspec`, modCopyPath);
-        if (!packResult.success || !packResult.packagePath) {
-            const errorMsg = `Packaging failed: ${packResult.error}`;
-            core.setFailed(errorMsg);
-            core.setOutput('error', errorMsg);
-            core.setOutput('success', 'false');
-            return;
-        }
-        core.info(`  - Package created: ${packResult.packagePath}`);
-        // Step 7: Push to NuGet server
-        core.info('Step 7: Publishing to NuGet server...');
-        const pushResult = await (0, nuget_js_1.pushNupkg)(packResult.packagePath, nugetServer, nugetApiKey, modCopyPath);
-        if (!pushResult.success) {
-            const errorMsg = `Publishing failed: ${pushResult.error}`;
-            core.setFailed(errorMsg);
-            core.setOutput('error', errorMsg);
-            core.setOutput('success', 'false');
-            return;
-        }
-        core.info('  - Package published successfully!');
-        // Set outputs
-        core.setOutput('success', 'true');
-        core.setOutput('package_path', packResult.packagePath);
-        core.setOutput('version', metadata.version || '1.0.0');
+        // Extract package path from output
+        // ducky-cli outputs: "Package created: /path/to/package.nupkg"
+        const packageMatch = stdout.match(/Package created:\s*(.+?\.nupkg)/m);
+        const packagePath = packageMatch ? packageMatch[1].trim() : '';
         core.info('========================================');
         core.info('Action completed successfully!');
-        core.info(`Package: ${packResult.packagePath}`);
-        core.info(`Version: ${metadata.version || '1.0.0'}`);
+        if (packagePath) {
+            core.info(`Package: ${packagePath}`);
+        }
         core.info('========================================');
+        // Set outputs
+        core.setOutput('success', 'true');
+        if (packagePath) {
+            core.setOutput('package_path', packagePath);
+        }
     }
     catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
@@ -25800,528 +25795,6 @@ async function run() {
     }
 }
 run();
-
-
-/***/ }),
-
-/***/ 9860:
-/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
-
-"use strict";
-
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.ensureNugetExe = ensureNugetExe;
-exports.packNupkg = packNupkg;
-exports.pushNupkg = pushNupkg;
-const exec_1 = __nccwpck_require__(5236);
-const os_1 = __nccwpck_require__(857);
-const path_1 = __nccwpck_require__(6928);
-const fs_1 = __nccwpck_require__(9896);
-const promises_1 = __nccwpck_require__(1943);
-const NUGET_EXE_URL = 'https://dist.nuget.org/win-x86-commandline/latest/nuget.exe';
-const NUGET_EXE_PATH = (0, path_1.join)((0, os_1.homedir)(), 'nuget.exe');
-const NUGET_WRAPPER_PATH = (0, path_1.join)((0, os_1.homedir)(), 'nuget');
-const isWindows = (0, os_1.platform)() === 'win32';
-/**
- * Ensures nuget.exe is available
- */
-async function ensureNugetExe() {
-    const core = await Promise.resolve().then(() => __importStar(__nccwpck_require__(7484)));
-    if (isWindows) {
-        // Windows: just use nuget.exe directly
-        if (!(0, fs_1.existsSync)(NUGET_EXE_PATH)) {
-            core.info(`Downloading nuget.exe for Windows...`);
-            await downloadFile(NUGET_EXE_URL, NUGET_EXE_PATH);
-        }
-        return NUGET_EXE_PATH;
-    }
-    else {
-        // Unix: check if mono is available first
-        try {
-            const { execSync } = await Promise.resolve().then(() => __importStar(__nccwpck_require__(5317)));
-            execSync('mono --version', { stdio: 'ignore' });
-            core.info('Mono is available for nuget.exe');
-        }
-        catch {
-            throw new Error('mono command not found. Please add the following step before this action:\n' +
-                '  - name: Install Mono (for nuget.exe)\n' +
-                '    run: |\n' +
-                '      sudo apt-get update\n' +
-                '      sudo apt-get install -y mono-complete');
-        }
-        // Create mono wrapper for nuget.exe
-        if ((0, fs_1.existsSync)(NUGET_WRAPPER_PATH)) {
-            return NUGET_WRAPPER_PATH;
-        }
-        if (!(0, fs_1.existsSync)(NUGET_EXE_PATH)) {
-            core.info(`Downloading nuget.exe...`);
-            await downloadFile(NUGET_EXE_URL, NUGET_EXE_PATH);
-        }
-        // Create wrapper script that uses mono
-        const { writeFile } = await Promise.resolve().then(() => __importStar(__nccwpck_require__(1943)));
-        const wrapperContent = `#!/bin/bash
-mono "${NUGET_EXE_PATH}" "$@"
-`;
-        await writeFile(NUGET_WRAPPER_PATH, wrapperContent, { mode: 0o755 });
-        core.info(`Created NuGet wrapper at: ${NUGET_WRAPPER_PATH}`);
-        return NUGET_WRAPPER_PATH;
-    }
-}
-/**
- * Download file from URL to path
- */
-async function downloadFile(url, destPath) {
-    const https = await Promise.resolve().then(() => __importStar(__nccwpck_require__(5692)));
-    const fs = await Promise.resolve().then(() => __importStar(__nccwpck_require__(9896)));
-    return new Promise((resolve, reject) => {
-        const file = fs.createWriteStream(destPath);
-        https.get(url, (response) => {
-            if (response.statusCode !== 200) {
-                reject(new Error(`Failed to download: ${response.statusCode}`));
-                return;
-            }
-            response.pipe(file);
-            file.on('finish', async () => {
-                file.close();
-                try {
-                    await (0, promises_1.chmod)(destPath, 0o755);
-                }
-                catch {
-                    // Ignore permission errors
-                }
-                resolve();
-            });
-        }).on('error', (err) => {
-            fs.unlink(destPath, () => { });
-            reject(err);
-        });
-    });
-}
-/**
- * Runs `nuget pack` to create a .nupkg file
- */
-async function packNupkg(nuspecFile, workingDirectory) {
-    const core = await Promise.resolve().then(() => __importStar(__nccwpck_require__(7484)));
-    try {
-        const nuspecName = nuspecFile.split('/').pop() || nuspecFile;
-        // Get the nuget command (nuget.exe or mono wrapper)
-        const nugetCmd = await ensureNugetExe();
-        core.info(`Running: ${nugetCmd} pack ${nuspecName}`);
-        let stdout = '';
-        let stderr = '';
-        const exitCode = await (0, exec_1.exec)(nugetCmd, ['pack', nuspecFile], {
-            cwd: workingDirectory,
-            listeners: {
-                stdout: (data) => {
-                    stdout += data.toString();
-                },
-                stderr: (data) => {
-                    stderr += data.toString();
-                }
-            },
-            silent: false
-        });
-        if (exitCode !== 0) {
-            return {
-                success: false,
-                error: `NuGet pack failed with exit code ${exitCode}: ${stderr || stdout}`
-            };
-        }
-        // Extract package path from output
-        const match = stdout.match(/Successfully created package '(.+?)'/);
-        if (match && match[1]) {
-            return { success: true, packagePath: match[1] };
-        }
-        // Fallback: try to find .nupkg file in working directory
-        const { readdir } = await Promise.resolve().then(() => __importStar(__nccwpck_require__(1943)));
-        const { join } = await Promise.resolve().then(() => __importStar(__nccwpck_require__(6928)));
-        const files = await readdir(workingDirectory);
-        const nupkgFile = files.find(f => f.endsWith('.nupkg'));
-        if (nupkgFile) {
-            return { success: true, packagePath: join(workingDirectory, nupkgFile) };
-        }
-        return {
-            success: false,
-            error: 'Package was created but could not be located'
-        };
-    }
-    catch (error) {
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : String(error)
-        };
-    }
-}
-/**
- * Runs `nuget push` to publish a .nupkg file
- * @param packagePath Path to the .nupkg file
- * @param server NuGet server URL
- * @param apiKey API key from NuGet/login@v1
- */
-async function pushNupkg(packagePath, server, apiKey, workingDirectory) {
-    const core = await Promise.resolve().then(() => __importStar(__nccwpck_require__(7484)));
-    try {
-        const packageName = packagePath.split('/').pop() || packagePath;
-        // Get the nuget command (nuget.exe or mono wrapper)
-        const nugetCmd = await ensureNugetExe();
-        // Build command args for nuget push
-        const args = [
-            'push',
-            packagePath,
-            '-Source', server
-        ];
-        if (apiKey && apiKey.trim() !== '') {
-            args.push('-ApiKey', apiKey);
-            core.setSecret(apiKey);
-            core.info(`Running: ${nugetCmd} push ${packageName} -Source ${server} (with API key)`);
-        }
-        else {
-            core.info(`Running: ${nugetCmd} push ${packageName} -Source ${server}`);
-        }
-        let stdout = '';
-        let stderr = '';
-        const exitCode = await (0, exec_1.exec)(nugetCmd, args, {
-            cwd: workingDirectory,
-            listeners: {
-                stdout: (data) => {
-                    stdout += data.toString();
-                },
-                stderr: (data) => {
-                    stderr += data.toString();
-                }
-            },
-            silent: false
-        });
-        if (exitCode !== 0) {
-            return {
-                success: false,
-                error: `NuGet push failed with exit code ${exitCode}: ${stderr || stdout}`
-            };
-        }
-        return { success: true };
-    }
-    catch (error) {
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : String(error)
-        };
-    }
-}
-
-
-/***/ }),
-
-/***/ 3618:
-/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.generateNuspec = generateNuspec;
-exports.hasPreviewImage = hasPreviewImage;
-const promises_1 = __nccwpck_require__(1943);
-const fs_1 = __nccwpck_require__(9896);
-const DEFAULT_VERSION = '1.0.0';
-const DEFAULT_AUTHORS = 'Unknown';
-// Default tags automatically added to all mod packages
-const DEFAULT_TAGS = ['duckymod', 'game-mod'];
-/**
- * Generates the XML content for a .nuspec file following the NuGet Mod Packaging Specification v1.0
- */
-function generateNuspec(metadata, hasPreviewPng) {
-    const version = metadata.version || DEFAULT_VERSION;
-    const authors = metadata.authors || DEFAULT_AUTHORS;
-    // Combine default tags with user tags, convert comma-separated to space-separated
-    const userTags = metadata.tags ? metadata.tags.split(',').map(t => t.trim()).filter(t => t) : [];
-    const allTags = [...DEFAULT_TAGS, ...userTags];
-    const tags = allTags.join(' ');
-    let xml = `<?xml version="1.0" encoding="utf-8"?>
-<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
-  <metadata>
-    <id>${escapeXml(metadata.name)}</id>
-    <version>${escapeXml(version)}</version>
-    <title>${escapeXml(metadata.displayName)}</title>
-    <description>${escapeXml(metadata.description)}</description>
-    <authors>${escapeXml(authors)}</authors>
-    <developmentDependency>false</developmentDependency>
-    <frameworkAssemblies>
-      <frameworkAssembly assemblyName="netstandard" targetFramework=".NETStandard2.1" />
-    </frameworkAssemblies>`;
-    if (tags) {
-        xml += `\n    <tags>${escapeXml(tags)}</tags>`;
-    }
-    if (hasPreviewPng) {
-        xml += `\n    <icon>icon.png</icon>`;
-    }
-    if (metadata.license) {
-        xml += `\n    <license type="expression">${escapeXml(metadata.license)}</license>`;
-    }
-    if (metadata.homepage) {
-        xml += `\n    <projectUrl>${escapeXml(metadata.homepage)}</projectUrl>`;
-    }
-    xml += `\n  </metadata>
-  <files>`;
-    if (hasPreviewPng) {
-        xml += `
-    <file src="preview.png" target="icon.png" />`;
-    }
-    // Wildcard rule for all mod files
-    xml += `
-    <file src="**" target="content\\" exclude="preview.png" />
-  </files>
-</package>`;
-    return xml;
-}
-/**
- * Escapes special XML characters
- */
-function escapeXml(text) {
-    return text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;');
-}
-/**
- * Checks if preview.png exists in the mod folder
- */
-async function hasPreviewImage(modFolderPath) {
-    try {
-        await (0, promises_1.access)(`${modFolderPath}/preview.png`, fs_1.constants.R_OK);
-        return true;
-    }
-    catch {
-        return false;
-    }
-}
-
-
-/***/ }),
-
-/***/ 7196:
-/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
-
-"use strict";
-
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.parseInfoIni = parseInfoIni;
-exports.readInfoIni = readInfoIni;
-/**
- * Parses a flat INI file (without sections)
- * Format: key = value
- * Supports multiline values with \| delimiter for localization
- */
-function parseInfoIni(content) {
-    const lines = content.split(/\r?\n/);
-    const metadata = {};
-    for (const line of lines) {
-        const trimmed = line.trim();
-        // Skip empty lines and comments
-        if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith(';')) {
-            continue;
-        }
-        // Parse "key = value" format
-        const match = trimmed.match(/^([^=]+?)\s*=\s*(.*)$/);
-        if (match) {
-            const [, key, value] = match;
-            metadata[key.trim()] = value.trim();
-        }
-    }
-    // Validate required fields
-    const requiredFields = ['name', 'displayName', 'description'];
-    const missingFields = requiredFields.filter(field => !metadata[field]);
-    if (missingFields.length > 0) {
-        return {
-            success: false,
-            error: `Missing required fields: ${missingFields.join(', ')}`
-        };
-    }
-    return {
-        success: true,
-        metadata: {
-            name: metadata.name,
-            displayName: metadata.displayName,
-            description: metadata.description,
-            publishedFileId: metadata.publishedFileId,
-            version: metadata.version,
-            tags: metadata.tags,
-            authors: metadata.authors,
-            license: metadata.license,
-            homepage: metadata.homepage
-        }
-    };
-}
-/**
- * Reads and parses an info.ini file
- */
-async function readInfoIni(filePath) {
-    const fs = await Promise.resolve().then(() => __importStar(__nccwpck_require__(1943)));
-    try {
-        const content = await fs.readFile(filePath, 'utf-8');
-        return parseInfoIni(content);
-    }
-    catch (error) {
-        if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
-            return {
-                success: false,
-                error: `info.ini not found at: ${filePath}`
-            };
-        }
-        throw error;
-    }
-}
-
-
-/***/ }),
-
-/***/ 4344:
-/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.isValidSemVer = isValidSemVer;
-exports.isValidNuGetId = isValidNuGetId;
-exports.validateDllName = validateDllName;
-exports.validateMetadata = validateMetadata;
-const promises_1 = __nccwpck_require__(1943);
-/**
- * Validates a SemVer 2.0.0 version string
- * Pattern: major.minor.patch[-prerelease][+build]
- */
-function isValidSemVer(version) {
-    // SemVer 2.0 regex pattern
-    const semverRegex = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
-    return semverRegex.test(version);
-}
-/**
- * Validates a NuGet ID (must start with letter, contain only alphanumeric, ., _, -)
- */
-function isValidNuGetId(id) {
-    // NuGet ID validation: must start with letter or underscore, contain only alphanumeric, ., _, -
-    const nugetIdRegex = /^[a-zA-Z_][a-zA-Z0-9._-]*$/;
-    return nugetIdRegex.test(id);
-}
-/**
- * Validates that the name field matches the DLL filename
- */
-async function validateDllName(modFolderPath, name) {
-    const errors = [];
-    try {
-        const files = await (0, promises_1.readdir)(modFolderPath);
-        const dllFiles = files.filter(f => f.toLowerCase().endsWith('.dll'));
-        if (dllFiles.length === 0) {
-            errors.push(`No DLL file found in mod folder: ${modFolderPath}`);
-            return { success: false, errors };
-        }
-        const expectedDll = `${name}.dll`;
-        const hasMatchingDll = dllFiles.some(dll => {
-            const dllNameWithoutExt = dll.replace(/\.dll$/i, '');
-            return dllNameWithoutExt === name;
-        });
-        if (!hasMatchingDll) {
-            errors.push(`The 'name' field (${name}) does not match any DLL filename. ` +
-                `Expected: ${expectedDll}. Found: ${dllFiles.join(', ')}`);
-        }
-    }
-    catch (error) {
-        errors.push(`Failed to read mod folder: ${error instanceof Error ? error.message : String(error)}`);
-    }
-    return {
-        success: errors.length === 0,
-        errors
-    };
-}
-/**
- * Validates the mod metadata
- */
-async function validateMetadata(metadata, modFolderPath) {
-    const errors = [];
-    // Validate NuGet ID format
-    if (!isValidNuGetId(metadata.name)) {
-        errors.push(`The 'name' field (${metadata.name}) is not a valid NuGet ID. ` +
-            `Must start with a letter or underscore and contain only alphanumeric characters, dots, underscores, and hyphens.`);
-    }
-    // Validate version format if provided
-    if (metadata.version && !isValidSemVer(metadata.version)) {
-        errors.push(`The 'version' field (${metadata.version}) is not valid SemVer 2.0.0. ` +
-            `Expected format: major.minor.patch (e.g., 1.0.0, 2.3.4-beta, 1.0.0-rc.1+build.123)`);
-    }
-    // Validate DLL name matches
-    const dllValidation = await validateDllName(modFolderPath, metadata.name);
-    errors.push(...dllValidation.errors);
-    return {
-        success: errors.length === 0,
-        errors
-    };
-}
 
 
 /***/ }),

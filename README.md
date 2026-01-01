@@ -197,7 +197,7 @@ jobs:
 
 ---
 
-## Development (本地开发)
+## Development
 
 ### Setup
 
@@ -207,7 +207,7 @@ npm run build    # Compile TypeScript to dist/
 npm run package  # Bundle with ncc into single file (required before commit)
 ```
 
-**重要**: 修改代码后必须运行 `npm run package` 来打包依赖，因为 GitHub Action 运行时不会安装 node_modules。
+**Important**: You must run `npm run package` after making code changes, as GitHub Actions runtime will not install node_modules.
 
 ### Testing Locally
 
@@ -223,23 +223,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 使用本地 action (当前仓库)
+      # Use local action (current repository)
       - uses: ./
         with:
           mod_folder_path: './test-mods/ExampleMod'
           nuget_api_key: ${{ secrets.NUGET_API_KEY }}
 ```
 
-### Project Structure
+## Implementation
 
-```
-src/
-├── parser.ts      - info.ini parser (flat structure)
-├── validation.ts  - DLL/SemVer/NuGet ID validation
-├── nuspec.ts      - .nuspec XML generator
-├── nuget.ts       - NuGet CLI integration
-└── index.ts       - Main entry point
-```
+This action is a thin wrapper around [`@ducky7go/ducky-cli`](https://github.com/ducky7go/ducky-cli), which handles all NuGet packaging logic. The action:
+- Accepts GitHub Action inputs and translates them to CLI arguments
+- Executes `ducky nuget push` with the `--pack` flag
+- Preserves all existing input/output interfaces for backward compatibility
 
 ## License
 
