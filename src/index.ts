@@ -1,12 +1,13 @@
 import * as core from '@actions/core';
+import { exec } from '@actions/exec';
 import { resolve } from 'path';
-import { writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
-import { readInfoIni } from './parser.js';
-import { validateMetadata } from './validation.js';
-import { generateNuspec, hasPreviewImage } from './nuspec.js';
-import { packNupkg, pushNupkg } from './nuget.js';
+import { readFile } from 'fs/promises';
 
+/**
+ * Main action entry point
+ * Refactored to use @ducky7go/ducky-cli as a dependency
+ */
 async function run(): Promise<void> {
   try {
     // Get inputs
@@ -28,111 +29,93 @@ async function run(): Promise<void> {
 
     // Verify mod folder exists
     if (!existsSync(modFolderPath)) {
-      core.setFailed(`Mod folder not found: ${modFolderPath}`);
-      core.setOutput('error', `Mod folder not found: ${modFolderPath}`);
+      const errorMsg = `Mod folder not found: ${modFolderPath}`;
+      core.setFailed(errorMsg);
+      core.setOutput('error', errorMsg);
       core.setOutput('success', 'false');
       return;
     }
 
-    // Step 1: Parse info.ini
-    core.info('Step 1: Parsing info.ini...');
+    // Verify info.ini exists
     const infoIniPath = resolve(modFolderPath, 'info.ini');
-    const parseResult = await readInfoIni(infoIniPath);
-
-    if (!parseResult.success || !parseResult.metadata) {
-      const errorMsg = `Failed to parse info.ini: ${parseResult.error}`;
+    if (!existsSync(infoIniPath)) {
+      const errorMsg = `info.ini not found at: ${infoIniPath}`;
       core.setFailed(errorMsg);
       core.setOutput('error', errorMsg);
       core.setOutput('success', 'false');
       return;
     }
 
-    const metadata = parseResult.metadata;
-    core.info(`  - name: ${metadata.name}`);
-    core.info(`  - displayName: ${metadata.displayName}`);
-    core.info(`  - version: ${metadata.version || '1.0.0 (default)'}`);
-
-    // Step 2: Validate metadata
-    core.info('Step 2: Validating metadata...');
-    const validationResult = await validateMetadata(metadata, modFolderPath);
-
-    if (!validationResult.success) {
-      const errorMsg = `Validation failed:\n${validationResult.errors.map(e => `  - ${e}`).join('\n')}`;
-      core.setFailed(errorMsg);
-      core.setOutput('error', errorMsg);
-      core.setOutput('success', 'false');
-      return;
-    }
-    core.info('  - Validation passed');
-
-    // Step 3: Generate .nuspec file
-    core.info('Step 3: Generating .nuspec file...');
-    const hasPreview = await hasPreviewImage(modFolderPath);
-    const nuspecContent = generateNuspec(metadata, hasPreview);
-    core.info(`  - Has preview.png: ${hasPreview}`);
-
-    // Create temp directory for packaging
-    const tempDir = resolve(workspace, '.nuget-temp');
-    await mkdir(tempDir, { recursive: true });
-
-    const nuspecPath = resolve(tempDir, `${metadata.name}.nuspec`);
-    await writeFile(nuspecPath, nuspecContent, 'utf-8');
-    core.info(`  - .nuspec created at: ${nuspecPath}`);
-
-    // Step 5: Copy mod files to temp directory
-    core.info('Step 5: Copying mod files for packaging...');
-    const { cp } = await import('@actions/io');
-    await cp(modFolderPath, resolve(tempDir, 'mod-copy'), { recursive: true });
-    const modCopyPath = resolve(tempDir, 'mod-copy');
-    core.info(`  - Files copied to: ${modCopyPath}`);
-
-    // Copy .nuspec to the mod copy directory
-    const { copyFile } = await import('fs/promises');
-    await copyFile(nuspecPath, resolve(modCopyPath, `${metadata.name}.nuspec`));
-
-    // Step 6: Pack .nupkg
-    core.info('Step 6: Creating NuGet package...');
-    const packResult = await packNupkg(`${metadata.name}.nuspec`, modCopyPath);
-
-    if (!packResult.success || !packResult.packagePath) {
-      const errorMsg = `Packaging failed: ${packResult.error}`;
-      core.setFailed(errorMsg);
-      core.setOutput('error', errorMsg);
-      core.setOutput('success', 'false');
-      return;
+    // Extract version from info.ini for output
+    try {
+      const infoIniContent = await readFile(infoIniPath, 'utf-8');
+      const versionMatch = infoIniContent.match(/^version\s*=\s*(.+)$/m);
+      const version = versionMatch ? versionMatch[1].trim() : '1.0.0';
+      core.info(`Version from info.ini: ${version}`);
+      core.setOutput('version', version);
+    } catch {
+      core.setOutput('version', '1.0.0');
     }
 
-    core.info(`  - Package created: ${packResult.packagePath}`);
+    // Build ducky-cli command arguments
+    const args = ['nuget', 'push', modFolderPath, '--pack'];
 
-    // Step 7: Push to NuGet server
-    core.info('Step 7: Publishing to NuGet server...');
-    const pushResult = await pushNupkg(
-      packResult.packagePath,
-      nugetServer,
-      nugetApiKey,
-      modCopyPath
-    );
+    if (nugetServer) {
+      args.push('--server', nugetServer);
+    }
 
-    if (!pushResult.success) {
-      const errorMsg = `Publishing failed: ${pushResult.error}`;
+    if (nugetApiKey) {
+      args.push('--api-key', nugetApiKey);
+    }
+
+    core.info(`Running: ducky ${args.map(a => a === nugetApiKey ? '***' : a).join(' ')}`);
+
+    // Execute ducky-cli command
+    let stdout = '';
+    let stderr = '';
+
+    const exitCode = await exec('npx', ['-y', '@ducky7go/ducky-cli', ...args], {
+      cwd: workspace,
+      listeners: {
+        stdout: (data: Buffer) => {
+          const text = data.toString();
+          stdout += text;
+          core.info(text.trim());
+        },
+        stderr: (data: Buffer) => {
+          const text = data.toString();
+          stderr += text;
+          core.error(text.trim());
+        }
+      },
+      silent: false
+    });
+
+    if (exitCode !== 0) {
+      const errorMsg = `ducky-cli failed with exit code ${exitCode}: ${stderr || stdout}`;
       core.setFailed(errorMsg);
       core.setOutput('error', errorMsg);
       core.setOutput('success', 'false');
       return;
     }
 
-    core.info('  - Package published successfully!');
-
-    // Set outputs
-    core.setOutput('success', 'true');
-    core.setOutput('package_path', packResult.packagePath);
-    core.setOutput('version', metadata.version || '1.0.0');
+    // Extract package path from output
+    // ducky-cli outputs: "Package created: /path/to/package.nupkg"
+    const packageMatch = stdout.match(/Package created:\s*(.+?\.nupkg)/m);
+    const packagePath = packageMatch ? packageMatch[1].trim() : '';
 
     core.info('========================================');
     core.info('Action completed successfully!');
-    core.info(`Package: ${packResult.packagePath}`);
-    core.info(`Version: ${metadata.version || '1.0.0'}`);
+    if (packagePath) {
+      core.info(`Package: ${packagePath}`);
+    }
     core.info('========================================');
+
+    // Set outputs
+    core.setOutput('success', 'true');
+    if (packagePath) {
+      core.setOutput('package_path', packagePath);
+    }
 
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
