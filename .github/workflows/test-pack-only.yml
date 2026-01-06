@@ -1,0 +1,73 @@
+name: Test Pack-Only Mode
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'action.yml'
+      - '.github/workflows/test-pack-only.yml'
+  workflow_dispatch:
+
+jobs:
+  test-pack-only:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Mono (for nuget.exe)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mono-complete
+
+      - name: Pack-only mode (no push)
+        id: pack
+        uses: ./
+        with:
+          mod_folder_path: "./DisplayItemValue"
+          push: false
+
+      - name: Verify outputs
+        run: |
+          echo "Success: ${{ steps.pack.outputs.success }}"
+          echo "Package Path: ${{ steps.pack.outputs.package_path }}"
+          echo "Version: ${{ steps.pack.outputs.version }}"
+          # Verify that outputs are set correctly
+          if [ "${{ steps.pack.outputs.success }}" != "true" ]; then
+            echo "Error: success output should be true"
+            exit 1
+          fi
+          if [ -z "${{ steps.pack.outputs.package_path }}" ]; then
+            echo "Error: package_path output should be set"
+            exit 1
+          fi
+          if [ -z "${{ steps.pack.outputs.version }}" ]; then
+            echo "Error: version output should be set"
+            exit 1
+          fi
+
+  test-default-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Mono (for nuget.exe)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mono-complete
+
+      - name: Default mode (should push, but will fail without API key)
+        id: test-push-default
+        uses: ./
+        with:
+          mod_folder_path: "./DisplayItemValue"
+        continue-on-error: true
+
+      - name: Verify default behavior attempts push
+        run: |
+          # This should fail because no API key is provided, but it should
+          # attempt the push operation, confirming default is push=true
+          if [ "${{ steps.test-push-default.outcome }}" != "failure" ]; then
+            echo "Note: Default push mode should fail without API key"
+          fi

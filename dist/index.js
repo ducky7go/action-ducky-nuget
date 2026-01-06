@@ -25697,6 +25697,8 @@ async function run() {
         const modFolderPathInput = core.getInput('mod_folder_path', { required: true });
         const nugetServer = core.getInput('nuget_server') || 'https://api.nuget.org/v3/index.json';
         const nugetApiKey = core.getInput('nuget_api_key'); // Optional - if empty, uses Trusted Publisher
+        const pushInput = core.getInput('push') || 'true';
+        const shouldPush = pushInput.toLowerCase() === 'true';
         // Resolve mod folder path (relative to GITHUB_WORKSPACE if not absolute)
         const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
         const modFolderPath = (0, path_1.resolve)(workspace, modFolderPathInput);
@@ -25737,12 +25739,24 @@ async function run() {
             core.setOutput('version', '1.0.0');
         }
         // Build ducky-cli command arguments
-        const args = ['nuget', 'push', modFolderPath, '--pack'];
-        if (nugetServer) {
-            args.push('--server', nugetServer);
+        let args;
+        let command;
+        if (shouldPush) {
+            // Full workflow: pack + push
+            command = 'push';
+            args = ['nuget', 'push', modFolderPath, '--pack'];
+            if (nugetServer) {
+                args.push('--server', nugetServer);
+            }
+            if (nugetApiKey) {
+                args.push('--api-key', nugetApiKey);
+            }
         }
-        if (nugetApiKey) {
-            args.push('--api-key', nugetApiKey);
+        else {
+            // Pack-only workflow
+            command = 'pack';
+            args = ['nuget', 'pack', modFolderPath];
+            core.info('Pack-only mode: package will be generated but not published');
         }
         core.info(`Running: ducky ${args.map(a => a === nugetApiKey ? '***' : a).join(' ')}`);
         // Execute ducky-cli command
@@ -25777,6 +25791,12 @@ async function run() {
         const packagePath = packageMatch ? packageMatch[1].trim() : '';
         core.info('========================================');
         core.info('Action completed successfully!');
+        if (shouldPush) {
+            core.info(`Package published to NuGet server: ${nugetServer}`);
+        }
+        else {
+            core.info('Package generated (not published - push=false)');
+        }
         if (packagePath) {
             core.info(`Package: ${packagePath}`);
         }

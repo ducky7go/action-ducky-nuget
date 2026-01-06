@@ -13,6 +13,29 @@ GitHub Action for packaging and publishing game mods to NuGet servers following 
 
 ## Usage
 
+### Pack-Only Mode (CI/CD Validation)
+
+Generate `.nupkg` file without publishing to NuGet server - useful for CI validation:
+
+```yaml
+jobs:
+  validate-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Mono
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mono-complete
+
+      - name: Pack Mod (no push)
+        uses: ducky7go/action-ducky-nuget@v1
+        with:
+          mod_folder_path: './mods/MyMod'
+          push: false
+```
+
 ### Complete Example (Recommended)
 
 Full workflow with all required dependencies:
@@ -93,6 +116,7 @@ jobs:
 | `mod_folder_path` | Yes | - | Path to the mod folder containing `info.ini` and mod files |
 | `nuget_server` | No | `https://api.nuget.org/v3/index.json` | NuGet server URL |
 | `nuget_api_key` | No | - | API key for authentication (omit to use Trusted Publisher) |
+| `push` | No | `true` | Whether to push the package to NuGet server after packing (set to `false` for pack-only mode) |
 
 ## Outputs
 
