@@ -20,6 +20,11 @@ inputs:
     description: 'API key for NuGet server authentication (required unless using Trusted Publisher)'
     required: false
 
+  push:
+    description: 'Whether to push the package to NuGet server after packing (set to false to only pack)'
+    required: false
+    default: 'true'
+
 outputs:
   success:
     description: 'true if packaging and publishing succeeded'
