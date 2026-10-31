@@ -35,15 +35,15 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 ## Build / test / run
 
 Scripts in `package.json`:
-- `npm run build` - `tsc` (outputs to `dist/`, CommonJS, ES2020, strict).
-- `npm run package` - `ncc build src/index.ts -o dist --license licenses.txt`; this is the step that produces the committed bundle.
-- There is no `npm test` script (the unused `jest` script was removed because jest is not installed and the repo has no tests). Verification is by the GitHub workflows (`test-pack-only.yml`) against `./DisplayItemValue`.
+- `pnpm run build` - `tsc` (outputs to `dist/`, CommonJS, ES2020, strict).
+- `pnpm run package` - `ncc build src/index.ts -o dist --license licenses.txt`; this is the step that produces the committed bundle.
+- There is no `pnpm test` script (the unused `jest` script was removed because jest is not installed and the repo has no tests). Verification is by the GitHub workflows (`test-pack-only.yml`) against `./DisplayItemValue`.
 
 Runtime requirements on the runner (from the workflows): Mono (`mono-complete`) is installed before the action because ducky-cli uses `nuget.exe`.
 
 ## Conventions
 
-- After any change to `src/index.ts` (or dependency changes), run `npm run package` and commit the refreshed `dist/`. `.gitignore` excludes `dist/*.d.ts`, `dist/*.d.ts.map`, `dist/*.js.map` and old per-module outputs, but the repo does track `dist/index.d.ts*` as well; do not rely on those being ignored.
+- After any change to `src/index.ts` (or dependency changes), run `pnpm run package` and commit the refreshed `dist/`. `.gitignore` excludes `dist/*.d.ts`, `dist/*.d.ts.map`, `dist/*.js.map` and old per-module outputs, but the repo does track `dist/index.d.ts*` as well; do not rely on those being ignored.
 - Failure handling pattern in `src/index.ts`: `core.setFailed(msg)` plus `core.setOutput('error', msg)` and `core.setOutput('success', 'false')`, then return.
 - Never log the API key; the logged command masks it as `***`.
 - Release: pushing a `v*` tag triggers `publish-mod.yml` (publishes the sample mod). Consumers pin `@v1`.

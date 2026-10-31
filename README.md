@@ -226,12 +226,12 @@ jobs:
 ### Setup
 
 ```bash
-npm install
-npm run build    # Compile TypeScript to dist/
-npm run package  # Bundle with ncc into single file (required before commit)
+pnpm install
+pnpm run build    # Compile TypeScript to dist/
+pnpm run package  # Bundle with ncc into single file (required before commit)
 ```
 
-**Important**: You must run `npm run package` after making code changes, as GitHub Actions runtime will not install node_modules.
+**Important**: You must run `pnpm run package` after making code changes, as GitHub Actions runtime will not install node_modules.
 
 ### Testing Locally
 
