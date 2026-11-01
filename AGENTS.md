@@ -1,21 +1,7 @@
-<!-- OPENSPEC:START -->
-# OpenSpec Instructions
+## OpenSpec
 
-These instructions are for AI assistants working in this project.
+This repo has no `openspec/` directory. OpenSpec for all `ducky7go-mono` sub-repos lives in the parent repo: `../../openspec/` (workflow rules `../../openspec/AGENTS.md`, specs `../../openspec/specs/`, changes `../../openspec/changes/`). This repo's former project context is `../../openspec/projects/action-ducky-nuget/project.md`.
 
-Always open `@/openspec/AGENTS.md` when the request:
-- Mentions planning or proposals (words like proposal, spec, change, plan)
-- Introduces new capabilities, breaking changes, architecture shifts, or big performance/security work
-- Sounds ambiguous and you need the authoritative spec before coding
-
-Use `@/openspec/AGENTS.md` to learn:
-- How to create and apply change proposals
-- Spec format and conventions
-- Project structure and guidelines
-
-Keep this managed block so 'openspec update' can refresh the instructions.
-
-<!-- OPENSPEC:END -->
 
 # action-ducky-nuget
 
@@ -30,7 +16,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - `dist/` - ncc bundle committed to git (`index.js`, `licenses.txt`, `index.d.ts*`). This is what GitHub runs.
 - `DisplayItemValue/` - sample mod (`info.ini`, `DisplayItemValue.dll`, `preview.png`) used by the repo's own CI workflows.
 - `.github/workflows/` - `publish-mod.yml` (on `v*` tag: patches the version in `DisplayItemValue/info.ini`, NuGet OIDC login, runs `uses: ./`), `test-pack-only.yml` (PR check for `src/**`, `action.yml`; pack-only and default-push cases), `release-drafter.yml`.
-- `openspec/` - OpenSpec specs (`specs/mod-packaging/spec.md`) and archived changes; see `openspec/AGENTS.md`.
+- `../../openspec/` - OpenSpec specs (`specs/mod-packaging/spec.md`) and archived changes; see `../../openspec/AGENTS.md`.
 
 ## Build / test / run
 
@@ -47,12 +33,12 @@ Runtime requirements on the runner (from the workflows): Mono (`mono-complete`) 
 - Failure handling pattern in `src/index.ts`: `core.setFailed(msg)` plus `core.setOutput('error', msg)` and `core.setOutput('success', 'false')`, then return.
 - Never log the API key; the logged command masks it as `***`.
 - Release: pushing a `v*` tag triggers `publish-mod.yml` (publishes the sample mod). Consumers pin `@v1`.
-- Larger changes go through OpenSpec (see the managed block above); archived changes live in `openspec/changes/archive/`.
+- Larger changes go through OpenSpec (see the OpenSpec note above); archived changes live in `../../openspec/changes/archive/`.
 
 ## Gotchas
 
 - `npx -y @ducky7go/ducky-cli` in `src/index.ts` is unpinned at runtime: the `@ducky7go/ducky-cli` version in `package.json` (`^0.0.4`) is not what actually executes; npx fetches the latest published version.
-- `openspec/project.md` is stale: it describes `parser.ts`, `validation.ts`, `nuspec.ts`, `nuget.ts` modules and "nuget.exe downloaded by the action", but `src/` contains only `index.ts` and packing is delegated to ducky-cli (see the archived change `2026-01-01-refactor-to-ducky-cli-dependency`). `package.json` `main` also points at `dist/index.js`.
+- `../../openspec/projects/action-ducky-nuget/project.md` is stale: it describes `parser.ts`, `validation.ts`, `nuspec.ts`, `nuget.ts` modules and "nuget.exe downloaded by the action", but `src/` contains only `index.ts` and packing is delegated to ducky-cli (see the archived change `2026-01-01-refactor-to-ducky-cli-dependency`). `package.json` `main` also points at `dist/index.js`.
 - README says the action validates `info.ini`, DLL name and SemVer; in this repo that validation is performed by ducky-cli, not by `src/index.ts` (which only checks the folder and `info.ini` exist).
 - `version` output comes from a regex on `info.ini` (default `1.0.0`), independent of what ducky-cli actually packs.
 
