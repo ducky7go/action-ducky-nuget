@@ -1,6 +1,6 @@
 ## OpenSpec
 
-This repo has no `openspec/` directory. OpenSpec for all `ducky7go-mono` sub-repos lives in the parent repo: `../../openspec/` (workflow rules `../../openspec/AGENTS.md`, specs `../../openspec/specs/`, changes `../../openspec/changes/`). This repo's former project context is `../../openspec/projects/action-ducky-nuget/project.md`.
+This repo has no `openspec/` directory. OpenSpec for all `ducky7go-mono` sub-repos lives in the parent repo: `../../openspec/` (workflow rules `../../openspec/AGENTS.md`, specs `../../openspec/specs/`, changes `../../openspec/changes/`).
 
 
 # action-ducky-nuget
@@ -38,7 +38,6 @@ Runtime requirements on the runner (from the workflows): Mono (`mono-complete`) 
 ## Gotchas
 
 - `npx -y @ducky7go/ducky-cli` in `src/index.ts` is unpinned at runtime: the `@ducky7go/ducky-cli` version in `package.json` (`^0.0.4`) is not what actually executes; npx fetches the latest published version.
-- `../../openspec/projects/action-ducky-nuget/project.md` is stale: it describes `parser.ts`, `validation.ts`, `nuspec.ts`, `nuget.ts` modules and "nuget.exe downloaded by the action", but `src/` contains only `index.ts` and packing is delegated to ducky-cli (see the archived change `2026-01-01-refactor-to-ducky-cli-dependency`). `package.json` `main` also points at `dist/index.js`.
 - README says the action validates `info.ini`, DLL name and SemVer; in this repo that validation is performed by ducky-cli, not by `src/index.ts` (which only checks the folder and `info.ini` exist).
 - `version` output comes from a regex on `info.ini` (default `1.0.0`), independent of what ducky-cli actually packs.
 
