@@ -11,3 +11,6 @@ dist/nuspec.js
 dist/parser.js
 dist/validation.js
 dist/index.js.map
+
+# Local deja session-rule export (auto-extracted from agent sessions; not committed)
+.deja/
